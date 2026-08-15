@@ -67,13 +67,18 @@ export function createProvider(config: z.infer<typeof Provider>): ProviderV4 {
                 ),
             });
         }
-        case "openai-compatible":
+        case "openai-compatible": {
+            let cleanedBaseURL = config.baseURL || "";
+            if (cleanedBaseURL.endsWith("/chat/completions")) {
+                cleanedBaseURL = cleanedBaseURL.substring(0, cleanedBaseURL.length - "/chat/completions".length);
+            }
             return createOpenAICompatible({
                 name: "openai-compatible",
                 apiKey,
-                baseURL: baseURL || "",
+                baseURL: cleanedBaseURL,
                 headers,
             });
+        }
         case "openrouter":
             return createOpenRouter({
                 apiKey,
@@ -281,10 +286,15 @@ export async function listModelsForProvider(
                 url = `${(baseURL ?? "http://localhost:11434").replace(/\/$/, "")}/api/tags`;
                 break;
             case "openai-compatible":
-            case "aigateway":
-                url = `${(baseURL ?? "").replace(/\/$/, "")}/models`;
+            case "aigateway": {
+                let cleanedBaseURL = (baseURL ?? "").replace(/\/$/, "");
+                if (cleanedBaseURL.endsWith("/chat/completions")) {
+                    cleanedBaseURL = cleanedBaseURL.substring(0, cleanedBaseURL.length - "/chat/completions".length);
+                }
+                url = `${cleanedBaseURL}/models`;
                 if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
                 break;
+            }
             default:
                 throw new Error(`Unsupported provider flavor: ${flavor}`);
         }
@@ -294,7 +304,13 @@ export async function listModelsForProvider(
             const body = await res.text().catch(() => "");
             throw new Error(`Failed to list models (${res.status}): ${body.slice(0, 200)}`);
         }
-        const data = await res.json();
+        let data;
+        try {
+            data = await res.json();
+        } catch (err) {
+            const body = await res.text().catch(() => "");
+            throw new Error(`Failed to parse models response from ${url} (invalid JSON). Make sure your endpoint URL is the base URL (e.g. ends with /v1). Response preview: ${body.slice(0, 100)}`);
+        }
 
         // Normalize each provider's response shape into a flat list of model id strings.
         let ids: string[] = [];
