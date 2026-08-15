@@ -57,11 +57,14 @@ jobs:
           "
 
       - name: Import Code Signing Certificate
-        if: ${{ secrets.APPLE_CERTIFICATE != '' }}
         env:
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "Skipping Apple code signing because secrets are missing."
+            exit 0
+          fi
           # Create a temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
@@ -248,9 +251,12 @@ jobs:
         working-directory: apps/x
 
       - name: Setup Azure Trusted Signing
-        if: ${{ secrets.AZURE_ENDPOINT != '' }}
         shell: pwsh
         run: |
+          if ("${{ secrets.AZURE_ENDPOINT }}" -eq "") {
+            Write-Host "Skipping Azure code signing because secrets are missing."
+            exit 0
+          }
           # Stage everything under a path WITHOUT spaces: @electron/windows-sign
           # splits signWithParams on spaces, so the /dlib and /dmdf paths must be
           # space-free.
